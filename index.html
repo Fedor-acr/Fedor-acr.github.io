@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Текстовый квест</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://unpkg.com/vue@3"></script>
+</head>
+<body>
+  <div id="app" class="container mt-5">
+    <div class="d-flex justify-content-end mb-2">
+      <button @click="toggleTheme" class="btn btn-sm btn-outline-secondary">{{ themeButtonText }}</button>
+    </div>
+    <div class="dialog-container" ref="dialogContainer">
+      <transition-group name="fade" tag="div">
+        <div v-for="(message, index) in messages" :key="index" class="message" :class="{ 'font-weight-bold': message.isChoice }">
+          {{ message.text }}
+        </div>
+      </transition-group>
+    </div>
+    
+    <div v-if="showButton" class="mt-3 text-end">
+      <button v-if="nextButton" @click="next()" class="btn btn-primary">Далее</button>
+      <button v-if="showChoices" @click="openChoices()" class="btn btn-primary">Выбор</button>
+    </div>
+
+    <div v-if="showBackButton" class="mt-3 text-start">
+      <button @click="goBack()" class="btn btn-outline-secondary">К прошлому выбору</button>
+    </div>
+
+    <!-- Модальное окно для выбора -->
+    <div v-if="showModal" class="modal-backdrop">
+      <div class="modal-content">
+        <div class="modal-body">
+          <button v-for="choice in choices" @click="chooseOption(choice)" class="btn btn-outline-primary w-100 mb-2">
+            {{ choice.text }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const { createApp } = Vue;
+
+createApp({
+  data() {
+    return {
+      messages: [],
+      showButton: true,
+      nextButton: true,
+      showChoices: false,
+      showModal: false,
+      choices: [],
+      currentStep: 0,
+      theme: 'light',
+      themeButtonText: 'Темная тема',
+      userPath: null,
+      history: [], // история всех выборов и шагов
+      showBackButton: false,
+      story: [
+        { text: 'Дивный огромный мир, населённый множеством магверей и разумных рас предстаёт перед твоими ногами. Ты великий герой, призванный в этот мир чтобы защитить его от опасных монстров. Однако твоя миссия уже была выполнена, великое зло повержено и теперь тебе остаётся лишь наслаждаться жизнью в этом прекрасном мире. '
+		, type: 'text' },
+        { text: 'Однако твоей спокойной жизни не суждено сбыться, так как в союзе с настолько могущественным героем заинтересовано множество рас и народов. И вот, альянс магверей, объединивший в себе все расы разумных зверолюдей в серьёз решает заполучить тебя как своего союзника. После великой войны у людей и эльфов вновь пробуждается неприязнь к зверолюдям, об их огромной помощи и жертвах быстро начинают забывать, а на политической арене они стремительно теряют свои позиции. Поэтому чтобы заполучить вас они готовы на всё и отправляют соблазнить одну из лучших дев со всего альянса. '
+		, type: 'text' },
+        { text: 'Лисицы всегда отличались своим хитрым умом и игривостью. Они славились своими навыками совращения и далеко не от того, что были невероятно хороши в постели, а их поцелуи были сладки как мёд, хоть это было и так. Все знали лисиц как опасных совратительниц, уводящих богатых мужей из семей и выпивающих их до последней капли крови. Их за это прозвали демонами и даже сжигали на кострах в своё время. Однако сейчас, во времена всеобщего перемирия, люди и лисицы даже заключали порой выгодные браки. Лисицы были непревзойдёнными любовницами, правда, довольно алчными и жадными, если быть честными. '
+		, type: 'text' },
+		{ text: '~~~~~~~~~~~~~~~~'
+		, type: 'text' },
+		{ text: 'Белое полупрозрачное платье легко сидит на её элегантной фигуре. Длинные стройные ноги неспешно и грациозно перемещают её восхитительную фигуру. Бледная невинная кожа, аккуратные красноватые коленки и объёмные упругие бёдра. Её гладкая кожа интимной зоны скрыта под белыми кружевными трусами с розовыми узелками. '
+		, type: 'text' },
+		{ text: 'Под лёгкой и шелковистой тканью полупрозрачного платья виднелась светлая кожа животика. Плоского и поднятого. Бёдра переходили в узкую талию почти без боков. А узкая талия неспешно расширялась к груди. На белоснежной коже виднелись волны мурашек от дуновений прохладного ветра. '
+		, type: 'text' },
+		{ text: 'Упругая и объёмная грудь чуть покачивалась при каждом шаге. Её сжимал и чуть придавливал едва тесноватый белый лифчик с кружевами в виде лепестков. Кожа груди была гладкой и нежной, а сама грудь была примерно третьего размера. Достаточно объёмная чтобы заполнить ладонь целиком и при этом недостаточно массивная, чтобы отвисать. Подтянутая, округлая и нежная. Идеальная фигура с идеальной кожей, она совершенно точно была бы невероятно успешной совратительницей, но её судьба была не в этом. Несмотря на свою чарующую красоту, она была девственна и наивна. '
+		, type: 'text' },
+		{ text: 'Её лицо украшали длинные пепельные волосы, глаза были красны как кровь, а на голове виднелись большие и пушистые уши белого цвета. Её блестящие губы расплылись в нежной улыбке, и она тепло взглянула на тебя. '
+		, type: 'text' },
+        { 
+          text: '-О, великий герой, спасибо, что приняли меня. Это невероятная честь для меня, стоять так перед вами и любоваться вашей красотой. ', 
+          type: 'choice', 
+          choices: [
+            { text: 'Продолжить слушать', nextStep: 9, path: 'list' }, 
+            { text: 'Прервать и перейти к сути', nextStep: 12, path: 'fast' },
+			{ text: 'Начать приставать', nextStep: 13, path: 'seks' }
+          ] 
+        },
+        { text: '-Для меня, просто тот факт, что я сейчас стою здесь перед вами, дышу рядом с вами и говорю рядом с вами… Это предел моих мечтаний! Я родилась в мире обречённом на разрушение, но вы… Вы принесли в него свет! Вы подарили всем нам надежду! Вы сплотили враждующие народы и дали отпор силам тьмы! Я обязана вам жизнью, мой герой! '
+		, type: 'text', path: 'list' },
+		{ text: 'Лисица расчувствовалась и покраснела. На её лбу виднелась испарина, а грудь тяжело поднималась вздох за вздохом. Она протёрла свой лоб рукой и неловко улыбнулась. Её щёки пылали ярким румянцем, а глаза блестели от бури чувств в её сердце. '
+		, type: 'text', path: 'list' },
+		{ text: '-Я… Мне тяжело это признавать, но… Я люблю вас, мой герой. Очень сильно люблю вас. Любила вас с самого детства. Вы были моим кумиром, моим светом, моей надеждой. Я обожаю вас каждой клеточкой своего тела. Я вся принадлежу лишь вам одному. До вас я никому не позволяла ко мне касаться, потому что я до сих пор отчётливо помню тот день, когда вы спасли мою деревню. Тогда я была совсем маленьким лисёнком и едва ли вы меня помните, но я выросла и теперь пришла к вам. Пришла, чтобы просить вас о невозможном… Но, я всё же, должна попробовать. Пожалуйста, сделайте меня своей женой. Я умоляю вас, я сделаю для вас всё что угодно, обещаю сделать вас самым счастливым человеком на свете, но только прошу… Позвольте мне… Позвольте мне стать вашей женой…'
+		, type: 'text', path: 'list' },
+        { text: '-Вы весьма проницательны, мой герой. Да, я, в самом деле, здесь по просьбе главы. Для всего нашего альянса было бы огромной честью, если бы вы взяли себе в жёны представительницу лисьего народа. Я буду во всём вам подчиняться и слушаться, буду вкусно готовить и я обещаю делать всё возможное, для вашего счастья и благополучия. '
+		, type: 'text', path: 'fast' },
+        { text: 'Лисица разочарована, взмахивает хвостом и уходит', type: 'text', path: 'seks' },
+        { 
+          text: 'Меня зовут Ари, а вас?', 
+          type: 'choice', 
+          path: 'friendly', 
+          choices: [
+            { text: 'Меня зовут Георг', nextStep: 8, path: 'Geo' }, 
+            { text: 'Меня зовут Тень', nextStep: 9, path: 'Shadow' }
+          ] 
+        },
+        { text: 'Лисица улыбается вам в ответ', type: 'text', path: 'Geo' },
+        { text: 'Лисица загадочно улыбается', type: 'text', path: 'Shadow' }
+      ]
+    };
+  },
+  methods: {
+    next() {
+    if (this.currentStep < this.story.length) {
+      let current = this.story[this.currentStep];
+
+      // Проверяем, подходит ли текущий шаг под выбранный путь
+      if (current.path && current.path !== this.userPath) {
+        this.currentStep++; // Пропускаем шаг, если он не соответствует пути
+        this.next(); // Рекурсивный вызов для поиска подходящего шага
+        return;
+      }
+
+      if (current.type === 'text') {
+        // Добавляем новое сообщение в список сообщений
+        this.messages.push({ text: current.text, isChoice: false });
+        this.currentStep++;
+        this.scrollToBottom(); // Прокручиваем вниз после добавления сообщения
+      } else if (current.type === 'choice') {
+        this.showChoices = true;
+        this.choices = current.choices;
+        this.showButton = false;
+        this.showModal = true;
+        this.showBackButton = true;
+      }
+    }
+  },
+  scrollToBottom() {
+    this.$nextTick(() => {
+      const container = this.$refs.dialogContainer;
+      container.scrollTop = container.scrollHeight;
+    });
+  },
+    openChoices() {
+      this.showModal = true;
+      this.showButton = false; // Скрываем кнопку "Выбор", так как открыто модальное окно
+    },
+    chooseOption(choice) {
+	  // Устанавливаем выбранный путь (если он есть)
+	  if (choice.path) {
+		this.userPath = choice.path;
+	  }
+
+	  // Добавляем сообщение для выбранного шага и сохраняем выбор в историю
+	  this.messages.push({ text: choice.text, isChoice: true });
+	  this.history.push({ step: this.currentStep, path: this.userPath });
+
+	  this.showModal = false;
+	  this.showChoices = false;
+	  this.showButton = true;
+
+	  // Переходим на шаг, который отображает текст после выбора
+	  this.currentStep = choice.nextStep; 
+
+	  // Сначала отобразим текст выбора, и только потом перейдем к следующему шагу
+	  setTimeout(() => {
+		this.next(); // продолжаем историю после выбора
+	  }, 300); // небольшая задержка
+	},
+    goBack() {
+	  if (this.history.length > 0) {
+		// Возвращаемся к последнему выбору
+		const lastChoice = this.history.pop();
+		this.currentStep = lastChoice.step - 1; // Возвращаемся на один шаг назад
+		this.userPath = lastChoice.path;
+
+		// Удаляем сообщения, которые были добавлены после последнего выбора
+		const lastChoiceIndex = this.history.length > 0 ? this.history[this.history.length - 1].step : 0;
+		this.messages = this.messages.slice(0, lastChoiceIndex * 2 + 1); // +1 чтобы оставить последнее сообщение
+
+		this.showButton = true;
+		this.showChoices = false;
+		this.showModal = false;
+
+		this.next(); // Переход на правильный шаг после возврата
+	  }
+	},
+    toggleTheme() {
+      if (this.theme === 'light') {
+        this.theme = 'dark';
+        this.themeButtonText = 'Светлая тема';
+        document.body.classList.add('dark-theme');
+      } else {
+        this.theme = 'light';
+        this.themeButtonText = 'Темная тема';
+        document.body.classList.remove('dark-theme');
+      }
+    }
+  },
+  mounted() {
+    this.next();
+  }
+}).mount('#app');
+</script>
+
+<style>
+body {
+  font-family: 'Arial', sans-serif;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.dark-theme {
+  background-color: #2d2d2d;
+  color: #f0f0f0;
+}
+
+.dialog-container {
+  max-height: 500px;
+  overflow-y: auto;
+  padding: 10px;
+  font-size: 24px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+.message {
+  margin-bottom: 10px;
+  font-size: 24px;
+  opacity: 0;
+  animation: fadeIn 0.5s forwards;
+}
+
+.font-weight-bold {
+  font-weight: bold;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  font-size: 24px;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  background: #fff;
+  padding: 20px;
+  border-radius: 5px;
+}
+
+.dark-theme .modal-content {
+  background: #333;
+}
+
+button {
+  transition: all 0.3s ease;
+}
+
+</style>
+</body>
+</html>
